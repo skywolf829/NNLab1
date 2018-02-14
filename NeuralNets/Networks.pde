@@ -2,6 +2,7 @@
 abstract class Network {
   protected boolean initialized = false;
   protected boolean training = false;
+  protected boolean momentum = true;
 
   protected int iteration;
   protected int numInputs, numOutputs, numLayers;
@@ -10,7 +11,7 @@ abstract class Network {
   public int x, y;
 
   public double currentCost, minCost;
-  public double learningRate = .35;
+  public double learningRate = .15;
   public double alpha = 0.9;
 
   protected ArrayList<Matrix> layerWeights;
@@ -19,8 +20,10 @@ abstract class Network {
   protected double[] lastInputs;
   protected double[] lastExpected;
 
+  int seed = 8675309;
 
   public void Initialize() {
+    randomSeed(seed);
     layerWeights = new ArrayList<Matrix>();
     layerBiases = new ArrayList<Matrix>();
     for (int i = 0; i <= numLayers; i++) {
@@ -152,8 +155,8 @@ abstract class Network {
           for (int j = 0; j < layerWeights.get(layer).getColumnDimension(); j++) {
             double weight = layerWeights.get(layer).get(i, j);
             int c = color(Math.abs((int)(weight * 4127 ) % 255), 
-            Math.abs((int)(weight * 13291) % 255), 
-            Math.abs((int)(weight * 30319) % 255));
+              Math.abs((int)(weight * 13291) % 255), 
+              Math.abs((int)(weight * 30319) % 255));
             fill(c);
             stroke(c);
             line(x + layer * (w / (2 + numLayers)), 
@@ -181,9 +184,9 @@ abstract class Network {
         for (int i = 0; i < nodesPerLayer[layer]; i++) {
           fill(0, 0, 255);
           stroke(0);
-          text("b="+(layerBiases.get(layer).get(0, i)+"").substring(0, 5),x + currentLayer * (w / (2 + numLayers)) - 10, 
+          text("b="+(layerBiases.get(layer).get(0, i)+"").substring(0, 5), x + currentLayer * (w / (2 + numLayers)) - 10, 
             y + (i + 1) * (h / (nodesPerLayer[layer] + 2)) - 10);
-            
+
           ellipse(x + currentLayer * (w / (2 + numLayers)), 
             y + (i + 1) * (h / (nodesPerLayer[layer] + 2)), 20, 20);
         }
@@ -193,10 +196,10 @@ abstract class Network {
       for (int i = 0; i < numOutputs; i++) {
         fill(0, 0, 255);
         stroke(0);
-        text("b="+(layerBiases.get(currentLayer-1).get(0, i)+"").substring(0, 5),
+        text("b="+(layerBiases.get(currentLayer-1).get(0, i)+"").substring(0, 5), 
           x + currentLayer * (w / (2 + numLayers) - 10), 
           y + (i + 1) * (h / (numOutputs + 2)) - 10);
-            
+
         ellipse(x + currentLayer * (w / (2 + numLayers)), 
           y + (i + 1) * (h / (numOutputs + 2)), 20, 20);
       }
@@ -255,29 +258,28 @@ class SigmoidNetwork extends Network {
     ArrayList<Matrix> dCost_dWeights = costFunctionPrime(deltas, activationValues);
     lastdCdW = new ArrayList<Matrix>();
     lastdCdB = new ArrayList<Matrix>();
-    
+
     for (int i = 0; i < layerWeights.size(); i++) {
       Matrix dCost_dWeight = dCost_dWeights.get(i).copy();
       Matrix dCost_dBias = deltas.get(i).copy();
-      
+
       dCost_dWeight = dCost_dWeight.times(learningRate);
       dCost_dBias = dCost_dBias.times(learningRate);
-         
+
       lastdCdW.add(dCost_dWeight.copy());
       lastdCdB.add(dCost_dBias.copy());
-      
-      if(iteration != 0){
+
+      if (iteration != 0 && momentum) {
         dCost_dWeight = dCost_dWeight.plus(lastdCdW.get(i).times(alpha)); 
         dCost_dBias = dCost_dBias.plus(lastdCdB.get(i).times(alpha));
       }
-      
+
       layerWeights.set(i, 
         layerWeights.get(i).minus(dCost_dWeight));
       layerBiases.set(i, 
         layerBiases.get(i).minus(dCost_dBias));
-     
     }
-    
+
     currentCost = cost(inputs, expected);
     iteration++;
   }
@@ -332,6 +334,14 @@ class SigmoidNetwork extends Network {
       c += Math.pow(output[i] - actual[i], 2);
     }
     return c / 2;
+  }
+  public double error(double[] input, double output[]) {
+    double[] actual = Forward(input);
+    double c = 0;
+    for (int i = 0; i < actual.length; i++) {
+      c += abs((float)(output[i] - actual[i]));
+    }
+    return c;
   }
   public double cost(double[][] input, double output[][]) {
     double c = 0;

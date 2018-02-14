@@ -92,8 +92,8 @@ public void draw() {
     else text("Begin", 190, 305);
   }
   textSize(16);
-  text("Current cost: " + nn.currentCost, 20, 350);
-  text("Largest cost this epoch: " + biggestErrorForEpoch, 20, 380);
+  text("Current error: " + sqrt((float)(2 * nn.currentCost)), 20, 350);
+  text("Largest error this epoch: " + biggestErrorForEpoch, 20, 380);
   text("Epoch " + iteration / 16 + ", iteration " + iteration, 20, 410);
   speed.draw();
   nn.draw();
@@ -155,26 +155,27 @@ public void keyPressed() {
 
 public void threadedTraining() {
   while (nn.training) {
-    if (iteration % 16 == 0) { 
-      biggestErrorForEpoch = 0;
-    }
     double[] input = project1InputSeeded(iteration);
     double[] output = project1Output(input);
     if (nn.IsInitialized()) {
       nn.Train(new double[][]{input}, 
         new double[][] {output});
     }
-    if (nn.currentCost > biggestErrorForEpoch){
-      biggestErrorForEpoch = nn.currentCost;
-    }
-    
+
+
     if (iteration % 16 == 15) { 
-      if (biggestErrorForEpoch <= 0.05f) {
-        nn.training = false;
-        return;
+      biggestErrorForEpoch = 0;
+      for (int i = 0; i < 16; i++) {
+        if (nn.error(project1InputSeeded(i), project1Output(project1InputSeeded(i))) >= 0.05f)
+        {
+          biggestErrorForEpoch = Math.max(biggestErrorForEpoch,
+            nn.error(project1InputSeeded(i), project1Output(project1InputSeeded(i))));
+        }
       }
+      if(biggestErrorForEpoch < 0.05f) nn.training = false;
     }
     
+
     iteration++;
     delay(speed.getValue());
   }
@@ -219,9 +220,11 @@ public double[] project1Output(double[] input) {
   return new double[] {num1s % 2 == 1 ? 1 : 0};
 }
 
+
 abstract class Network {
   protected boolean initialized = false;
   protected boolean training = false;
+  protected boolean momentum = true;
 
   protected int iteration;
   protected int numInputs, numOutputs, numLayers;
@@ -230,7 +233,7 @@ abstract class Network {
   public int x, y;
 
   public double currentCost, minCost;
-  public double learningRate = .35f;
+  public double learningRate = .15f;
   public double alpha = 0.9f;
 
   protected ArrayList<Matrix> layerWeights;
@@ -239,8 +242,10 @@ abstract class Network {
   protected double[] lastInputs;
   protected double[] lastExpected;
 
+  int seed = 8675309;
 
   public void Initialize() {
+    randomSeed(seed);
     layerWeights = new ArrayList<Matrix>();
     layerBiases = new ArrayList<Matrix>();
     for (int i = 0; i <= numLayers; i++) {
@@ -372,8 +377,8 @@ abstract class Network {
           for (int j = 0; j < layerWeights.get(layer).getColumnDimension(); j++) {
             double weight = layerWeights.get(layer).get(i, j);
             int c = color(Math.abs((int)(weight * 4127 ) % 255), 
-            Math.abs((int)(weight * 13291) % 255), 
-            Math.abs((int)(weight * 30319) % 255));
+              Math.abs((int)(weight * 13291) % 255), 
+              Math.abs((int)(weight * 30319) % 255));
             fill(c);
             stroke(c);
             line(x + layer * (w / (2 + numLayers)), 
@@ -401,9 +406,9 @@ abstract class Network {
         for (int i = 0; i < nodesPerLayer[layer]; i++) {
           fill(0, 0, 255);
           stroke(0);
-          text("b="+(layerBiases.get(layer).get(0, i)+"").substring(0, 5),x + currentLayer * (w / (2 + numLayers)) - 10, 
+          text("b="+(layerBiases.get(layer).get(0, i)+"").substring(0, 5), x + currentLayer * (w / (2 + numLayers)) - 10, 
             y + (i + 1) * (h / (nodesPerLayer[layer] + 2)) - 10);
-            
+
           ellipse(x + currentLayer * (w / (2 + numLayers)), 
             y + (i + 1) * (h / (nodesPerLayer[layer] + 2)), 20, 20);
         }
@@ -413,10 +418,10 @@ abstract class Network {
       for (int i = 0; i < numOutputs; i++) {
         fill(0, 0, 255);
         stroke(0);
-        text("b="+(layerBiases.get(currentLayer-1).get(0, i)+"").substring(0, 5),
+        text("b="+(layerBiases.get(currentLayer-1).get(0, i)+"").substring(0, 5), 
           x + currentLayer * (w / (2 + numLayers) - 10), 
           y + (i + 1) * (h / (numOutputs + 2)) - 10);
-            
+
         ellipse(x + currentLayer * (w / (2 + numLayers)), 
           y + (i + 1) * (h / (numOutputs + 2)), 20, 20);
       }
@@ -475,29 +480,28 @@ class SigmoidNetwork extends Network {
     ArrayList<Matrix> dCost_dWeights = costFunctionPrime(deltas, activationValues);
     lastdCdW = new ArrayList<Matrix>();
     lastdCdB = new ArrayList<Matrix>();
-    
+
     for (int i = 0; i < layerWeights.size(); i++) {
       Matrix dCost_dWeight = dCost_dWeights.get(i).copy();
       Matrix dCost_dBias = deltas.get(i).copy();
-      
+
       dCost_dWeight = dCost_dWeight.times(learningRate);
       dCost_dBias = dCost_dBias.times(learningRate);
-         
+
       lastdCdW.add(dCost_dWeight.copy());
       lastdCdB.add(dCost_dBias.copy());
-      
-      if(iteration != 0){
+
+      if (iteration != 0 && momentum) {
         dCost_dWeight = dCost_dWeight.plus(lastdCdW.get(i).times(alpha)); 
         dCost_dBias = dCost_dBias.plus(lastdCdB.get(i).times(alpha));
       }
-      
+
       layerWeights.set(i, 
         layerWeights.get(i).minus(dCost_dWeight));
       layerBiases.set(i, 
         layerBiases.get(i).minus(dCost_dBias));
-     
     }
-    
+
     currentCost = cost(inputs, expected);
     iteration++;
   }
@@ -552,6 +556,14 @@ class SigmoidNetwork extends Network {
       c += Math.pow(output[i] - actual[i], 2);
     }
     return c / 2;
+  }
+  public double error(double[] input, double output[]) {
+    double[] actual = Forward(input);
+    double c = 0;
+    for (int i = 0; i < actual.length; i++) {
+      c += abs((float)(output[i] - actual[i]));
+    }
+    return c;
   }
   public double cost(double[][] input, double output[][]) {
     double c = 0;
@@ -646,6 +658,7 @@ class MPNetwork extends Network {
   }
 }
 
+
 static class Perceptron{
   public static Matrix Activate(Matrix m){
     for(int i = 0; i < m.getRowDimension(); i++){
@@ -701,51 +714,49 @@ static class SigmoidNeuron{
 }
 
 
-class TextInput{
- public boolean selected = false;
- public String text = "0"; 
- public Rectangle r;
- public TextInput(int x, int y, int width, int height){
-   r = new Rectangle(x, y, width, height);
-   r.c = color(255);
- }
- public void draw(){
-   noStroke();
-   r.draw(); 
-   fill(0);
-   textSize(r.height - 5);
-   text(text, r.x + 1, r.y + r.height);
-   if(selected){
-     noFill();
-     stroke(0, 255, 0);
-     rect(r.x, r.y, r.width, r.height);
-   }
-   else{
-    noFill();
-    stroke(0);
-    rect(r.x, r.y, r.width, r.height);
-   }
- }
- public void mousePressed(){
-  if(r.contains(mouseX, mouseY)){
-    selected = true;
+class TextInput {
+  public boolean selected = false;
+  public String text = "0"; 
+  public Rectangle r;
+  public TextInput(int x, int y, int width, int height) {
+    r = new Rectangle(x, y, width, height);
+    r.c = color(255);
   }
-  else selected = false;
- }
- public void keyPressed() {
-   if(selected){
-    if (keyCode == BACKSPACE) {
-      if (text.length() > 0) {
-        text = text.substring(0, text.length()-1);
-      }
-    } else if (keyCode == DELETE) {
-      text = "";
-    } else if (keyCode != SHIFT && keyCode != CONTROL && keyCode != ALT
-      && textWidth(text + key) < r.width) {
-      text = text + key;
+  public void draw() {
+    noStroke();
+    r.draw(); 
+    fill(0);
+    textSize(r.height - 5);
+    text(text, r.x + 1, r.y + r.height);
+    if (selected) {
+      noFill();
+      stroke(0, 255, 0);
+      rect(r.x, r.y, r.width, r.height);
+    } else {
+      noFill();
+      stroke(0);
+      rect(r.x, r.y, r.width, r.height);
     }
-   }
-}
+  }
+  public void mousePressed() {
+    if (r.contains(mouseX, mouseY)) {
+      selected = true;
+    } else selected = false;
+  }
+  public void keyPressed() {
+    if (selected) {
+      if (keyCode == BACKSPACE) {
+        if (text.length() > 0) {
+          text = text.substring(0, text.length()-1);
+        }
+      } else if (keyCode == DELETE) {
+        text = "";
+      } else if (keyCode != SHIFT && keyCode != CONTROL && keyCode != ALT
+        && textWidth(text + key) < r.width) {
+        text = text + key;
+      }
+    }
+  }
 }
 
 class IntSlider {
@@ -768,10 +779,10 @@ class IntSlider {
     slider.c = color(0);
     background.c = color(0);
   }
-  public void setMin(int n){
+  public void setMin(int n) {
     min = n;
   }
-  public void setMax(int n){
+  public void setMax(int n) {
     max = n;
   }
   public int getValue() {
@@ -814,108 +825,108 @@ class IntSlider {
   }
 }
 
-class Point{
+class Point {
   public int x, y;
   public Circle circle;
   public int c;
-  public Point(int x, int y){
-   this.x = x; 
-   this.y = y;
-   circle = new Circle(x, y, 3, 3);
-   circle.c = color(0);
+  public Point(int x, int y) {
+    this.x = x; 
+    this.y = y;
+    circle = new Circle(x, y, 3, 3);
+    circle.c = color(0);
   }
-  public void draw(){
-   circle.draw();
+  public void draw() {
+    circle.draw();
   }
 }
-class MoveablePoint extends Point{
- public Circle circle;
- public boolean holding = false;
- public Rectangle bounds;
- public MoveablePoint(int x, int y, Rectangle bounds){
-  super(x, y);
-  this.x = x;
-  this.y = y;
-  circle = new Circle(x, y, 12, 12);
-  circle.c = color(0, 0, 255);
-  this.bounds = bounds;
- }
- public Point toPoint(){
-  return new Point(x, y);
- }
- public void draw(){
-   circle.c = color(0, 0, 255);
-   if(holding) circle.c = color(255, 0, 0);
-   circle.draw();
- }
- public void mousePressed(){
-   if(circle.contains(mouseX, mouseY)){
-     holding = true;
-   }
- }
- public void mouseDragged(){
-   if(holding){
-     x = mouseX;
-     y = mouseY;
-     circle.x = mouseX;
-     circle.y = mouseY;
-     if(circle.x < bounds.x){
-       circle.x = bounds.x;
-       x = bounds.x;
-     }
-     if(circle.y < bounds.y){
-       circle.y = bounds.y;
-       y = bounds.y;  
-     }
-     if(circle.x > bounds.x + bounds.width){
-       circle.x = bounds.x + bounds.width;
-       x = bounds.x + bounds.width;
-     }
-     if(circle.y > bounds.y + bounds.height){
-       circle.y = bounds.y + bounds.height;
-       y = bounds.y + bounds.height;
-     }
-   }
- }
- public void mouseReleased(){
-   holding = false;
- }
+class MoveablePoint extends Point {
+  public Circle circle;
+  public boolean holding = false;
+  public Rectangle bounds;
+  public MoveablePoint(int x, int y, Rectangle bounds) {
+    super(x, y);
+    this.x = x;
+    this.y = y;
+    circle = new Circle(x, y, 12, 12);
+    circle.c = color(0, 0, 255);
+    this.bounds = bounds;
+  }
+  public Point toPoint() {
+    return new Point(x, y);
+  }
+  public void draw() {
+    circle.c = color(0, 0, 255);
+    if (holding) circle.c = color(255, 0, 0);
+    circle.draw();
+  }
+  public void mousePressed() {
+    if (circle.contains(mouseX, mouseY)) {
+      holding = true;
+    }
+  }
+  public void mouseDragged() {
+    if (holding) {
+      x = mouseX;
+      y = mouseY;
+      circle.x = mouseX;
+      circle.y = mouseY;
+      if (circle.x < bounds.x) {
+        circle.x = bounds.x;
+        x = bounds.x;
+      }
+      if (circle.y < bounds.y) {
+        circle.y = bounds.y;
+        y = bounds.y;
+      }
+      if (circle.x > bounds.x + bounds.width) {
+        circle.x = bounds.x + bounds.width;
+        x = bounds.x + bounds.width;
+      }
+      if (circle.y > bounds.y + bounds.height) {
+        circle.y = bounds.y + bounds.height;
+        y = bounds.y + bounds.height;
+      }
+    }
+  }
+  public void mouseReleased() {
+    holding = false;
+  }
 }
 
-class Rectangle{
+class Rectangle {
   public int x, y, width, height;
   public int c;
-  public Rectangle(int x, int y, int width, int height){
-   this.x = x;
-   this.y = y;
-   this.width = width;
-   this.height = height;
+  public Rectangle(int x, int y, int width, int height) {
+    this.x = x;
+    this.y = y;
+    this.width = width;
+    this.height = height;
   }
-  public void draw(){
+  public void draw() {
     fill(c);
     rect(x, y, width, height);
     noFill();
     stroke(0);
     rect(this.x, this.y, this.width, this.height);
   }
-  public boolean contains(float x, float y){
+  public boolean contains(float x, float y) {
     return x >= this.x && x <= this.x + width && y >= this.y && y <= this.y + height;
   }
 }
 
-class Circle{
+class Circle {
   public int x, y, width, height;
   public int c;
-  public Circle(int x, int y, int width, int height){
-   this.x = x;
-   this.y = y;
-   this.width = width;
-   this.height = height;
+  public Circle(int x, int y, int width, int height) {
+    this.x = x;
+    this.y = y;
+    this.width = width;
+    this.height = height;
   }
-  public boolean contains(float x, float y){
+  public boolean contains(float x, float y) {
     return x >= this.x && x <= this.x + width && y >= this.y && y <= this.y + height;
   }
-  public void draw(){
+  public void draw() {
     fill(c);
     ellipse(x, y, width, height);
     noFill();
@@ -923,6 +934,7 @@ class Circle{
     ellipse(this.x, this.y, this.width, this.height);
   }
 }
+
 public static float distance(Point p1, Point p2) {
   return pow(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2), 0.5f);
 }

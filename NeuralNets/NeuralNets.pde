@@ -71,8 +71,8 @@ void draw() {
     else text("Begin", 190, 305);
   }
   textSize(16);
-  text("Current cost: " + nn.currentCost, 20, 350);
-  text("Largest cost this epoch: " + biggestErrorForEpoch, 20, 380);
+  text("Current error: " + sqrt((float)(2 * nn.currentCost)), 20, 350);
+  text("Largest error this epoch: " + biggestErrorForEpoch, 20, 380);
   text("Epoch " + iteration / 16 + ", iteration " + iteration, 20, 410);
   speed.draw();
   nn.draw();
@@ -134,26 +134,27 @@ void keyPressed() {
 
 void threadedTraining() {
   while (nn.training) {
-    if (iteration % 16 == 0) { 
-      biggestErrorForEpoch = 0;
-    }
     double[] input = project1InputSeeded(iteration);
     double[] output = project1Output(input);
     if (nn.IsInitialized()) {
       nn.Train(new double[][]{input}, 
         new double[][] {output});
     }
-    if (nn.currentCost > biggestErrorForEpoch){
-      biggestErrorForEpoch = nn.currentCost;
-    }
-    
+
+
     if (iteration % 16 == 15) { 
-      if (biggestErrorForEpoch <= 0.05) {
-        nn.training = false;
-        return;
+      biggestErrorForEpoch = 0;
+      for (int i = 0; i < 16; i++) {
+        if (nn.error(project1InputSeeded(i), project1Output(project1InputSeeded(i))) >= 0.05)
+        {
+          biggestErrorForEpoch = Math.max(biggestErrorForEpoch,
+            nn.error(project1InputSeeded(i), project1Output(project1InputSeeded(i))));
+        }
       }
+      if(biggestErrorForEpoch < 0.05) nn.training = false;
     }
     
+
     iteration++;
     delay(speed.getValue());
   }
