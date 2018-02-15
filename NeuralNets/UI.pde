@@ -37,7 +37,7 @@ class TextInput {
         }
       } else if (keyCode == DELETE) {
         text = "";
-      } else if (keyCode != SHIFT && keyCode != CONTROL && keyCode != ALT
+      } else if (keyCode != SHIFT
         && textWidth(text + key) < r.width) {
         text = text + key;
       }
